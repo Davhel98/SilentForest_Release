@@ -1,0 +1,51 @@
+name: Stable release cleanup
+
+on:
+  release:
+    types: [published, released, edited]
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: 'ID della release Stable da conservare'
+        required: true
+        type: string
+      dry_run:
+        description: 'Mostra le release da rimuovere senza cancellarle'
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stable-release-cleanup-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: >-
+      github.repository == 'Davhel98/SilentForest_Release' &&
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event.release.draft == false && github.event.release.prerelease == false))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Remove other patch releases and preserve all Git tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ github.event.release.id || inputs.release_id }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+        shell: bash
+        run: |
+          args=(--repository "$GITHUB_REPOSITORY" --release-id "$RELEASE_ID")
+          if [ "$GITHUB_EVENT_NAME" = "release" ]; then
+            args+=(--event-file "$GITHUB_EVENT_PATH")
+          fi
+          if [ "$DRY_RUN" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          python3 Scripts/CleanupReleases.py "${args[@]}"
